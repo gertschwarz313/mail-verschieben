@@ -1,0 +1,13 @@
+{
+  "name": "mail-verschieben",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mails per iPhone-Aktionstaste schnell in Ordner verschieben (IMAP, z. B. Strato)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "imapflow": "^2.12.1"
+  }
+}

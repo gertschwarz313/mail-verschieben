@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Verschieben">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<title>Mail verschieben</title>
+<style>
+:root {
+  --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --muted: #8e8e93; --line: rgba(60,60,67,.14);
+  --accent: #0a7cff; --accent-soft: rgba(10,124,255,.12); --ok: #30b158; --danger: #ff3b30;
+  --field: rgba(118,118,128,.12); --shadow: 0 8px 30px rgba(0,0,0,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --card: #1c1c1e; --text: #f2f2f7; --muted: #98989f; --line: rgba(84,84,88,.5);
+    --accent: #3d9bff; --accent-soft: rgba(61,155,255,.18); --field: rgba(118,118,128,.24); --shadow: 0 8px 30px rgba(0,0,0,.6);
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; min-height: 100vh; }
+button, input { font: inherit; color: inherit; }
+.wrap { max-width: 640px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px); }
+h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; margin: 8px 4px 2px; }
+.sub { color: var(--muted); margin: 0 4px 14px; font-size: 15px; }
+.hidden { display: none !important; }
+
+.search { position: relative; }
+.search input {
+  width: 100%; border: 0; outline: 0; background: var(--field); border-radius: 12px;
+  padding: 11px 38px 11px 38px; font-size: 17px; -webkit-appearance: none; appearance: none;
+}
+.search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); }
+.search .clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: 0; background: var(--muted); color: var(--card); width: 20px; height: 20px; border-radius: 50%; font-size: 13px; line-height: 20px; padding: 0; opacity: .7; }
+
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 0 12px; padding-bottom: 2px; scrollbar-width: none; }
+.chip { border: 0; background: var(--field); padding: 7px 14px; border-radius: 999px; font-size: 15px; white-space: nowrap; }
+.chip.on { background: var(--accent); color: #fff; }
+
+.list { background: var(--card); border-radius: 14px; overflow: hidden; margin-top: 12px; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 0; background: none; padding: 12px 14px; position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 14px; right: 0; border-top: .5px solid var(--line); }
+.row:active { background: var(--field); }
+.row .main { flex: 1; min-width: 0; }
+.row .top { display: flex; gap: 8px; align-items: baseline; }
+.row .who { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .when { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+.row .subj { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.dot.read { background: transparent; }
+.chev { color: var(--muted); opacity: .5; flex-shrink: 0; }
+
+.folder-ico { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex-shrink: 0; }
+.folder-ico svg { width: 19px; height: 19px; }
+.fname, .fpath { display: block; }
+.fname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fpath { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+mark { background: rgba(255,204,0,.45); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+.section { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .03em; margin: 20px 16px 6px; }
+.empty { text-align: center; color: var(--muted); padding: 34px 16px; font-size: 15px; }
+.spinner { width: 22px; height: 22px; border: 2.5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 30px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.link { border: 0; background: none; color: var(--accent); padding: 8px 4px; font-size: 17px; }
+
+/* Bottom-Sheet */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 10; }
+.backdrop.show { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; top: calc(env(safe-area-inset-top) + 10px); z-index: 11;
+  background: var(--bg); border-radius: 14px 14px 0 0; box-shadow: var(--shadow);
+  transform: translateY(105%); transition: transform .32s cubic-bezier(.2,.9,.25,1);
+  display: flex; flex-direction: column; max-width: 640px; margin: 0 auto;
+}
+.sheet.show { transform: none; }
+.sheet-head { padding: 8px 16px 10px; }
+.grabber { width: 36px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 10px; }
+.sheet-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sheet-bar h2 { font-size: 17px; margin: 0; font-weight: 600; }
+.sheet-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(env(safe-area-inset-bottom) + 16px); }
+.mailcard { background: var(--card); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: 15px; }
+.mailcard b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mailcard span { color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: 12px; padding: 14px; font-weight: 600; background: var(--accent); color: #fff; }
+.btn.ghost { background: var(--card); color: var(--accent); }
+.btn:disabled { opacity: .5; }
+.newbtn { margin-top: 14px; }
+
+.field { background: var(--card); border-radius: 12px; padding: 4px 14px; margin-bottom: 12px; }
+.field label { display: block; font-size: 13px; color: var(--muted); padding-top: 8px; }
+.field input { width: 100%; border: 0; outline: 0; background: none; padding: 4px 0 10px; font-size: 17px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; background: var(--card); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); }
+.picked { color: var(--accent); font-weight: 600; }
+
+/* Toast */
+.toast {
+  position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 18px); z-index: 30; max-width: 600px; margin: 0 auto;
+  background: rgba(30,30,32,.94); color: #fff; border-radius: 14px; padding: 13px 14px; display: flex; align-items: center; gap: 10px;
+  transform: translateY(150%); transition: transform .3s cubic-bezier(.2,.9,.25,1); box-shadow: var(--shadow); font-size: 15px;
+}
+.toast.show { transform: none; }
+.toast .msg { flex: 1; }
+.toast button { border: 0; background: rgba(255,255,255,.15); color: #fff; border-radius: 8px; padding: 6px 10px; font-weight: 600; font-size: 15px; }
+.toast .ic { width: 24px; height: 24px; border-radius: 50%; background: var(--ok); display: grid; place-items: center; flex-shrink: 0; }
+.toast.err .ic { background: var(--danger); }
+
+.login { max-width: 360px; margin: 18vh auto 0; text-align: center; }
+.login .logo { width: 72px; height: 72px; border-radius: 18px; background: linear-gradient(160deg, #3d9bff, #0a62e0); display: grid; place-items: center; margin: 0 auto 16px; color: #fff; }
+.login .logo svg { width: 38px; height: 38px; }
+.login .field { text-align: left; }
+.err-text { color: var(--danger); font-size: 15px; min-height: 20px; margin: 8px 0; }
+.foot { text-align: center; margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm5.4-2.1L21 21"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h3.6c.66 0 1.3.26 1.77.73L12.3 6.2H18.5A2.5 2.5 0 0 1 21 8.7v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11Z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m6 12.5 4 4 8-9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" d="M7 7l10 10M17 7 7 17"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4h3.6c.66 0 1.3.26 1.77.73L12.3 6.2H18.5A2.5 2.5 0 0 1 21 8.7v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5v-11Z" opacity=".35"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8 13.5h8m-3-3 3 3-3 3"/></symbol>
+</svg>
+
+<!-- Anmeldung -->
+<div id="loginView" class="wrap hidden">
+  <div class="login">
+    <div class="logo"><svg><use href="#i-move"/></svg></div>
+    <h1 style="font-size:26px">Mail verschieben</h1>
+    <p class="sub" style="margin-bottom:22px">Einmal anmelden, danach merkt sich das iPhone das.</p>
+    <form id="loginForm">
+      <div class="field"><label for="pw">Passwort für dieses Tool</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <div class="err-text" id="loginErr"></div>
+      <button class="btn" type="submit">Anmelden</button>
+    </form>
+  </div>
+</div>
+
+<!-- Hauptansicht: Mail auswählen -->
+<div id="mainView" class="wrap hidden">
+  <h1>Verschieben</h1>
+  <p class="sub">Tippe auf die Mail, die du ablegen willst.</p>
+  <div class="chips" id="accChips"></div>
+  <div class="search">
+    <svg><use href="#i-search"/></svg>
+    <input id="mailQ" type="search" placeholder="Mail suchen (Absender, Betreff)" enterkeyhint="search" autocomplete="off">
+    <button class="clear hidden" id="mailQClear" aria-label="Löschen">✕</button>
+  </div>
+  <div id="mailList"></div>
+  <div class="foot"><button class="link" id="reloadBtn">Aktualisieren</button></div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<!-- Sheet: Ordner wählen -->
+<div class="sheet" id="folderSheet" role="dialog" aria-modal="true" aria-label="Ordner wählen">
+  <div class="sheet-head">
+    <div class="grabber"></div>
+    <div class="sheet-bar">
+      <button class="link" data-close>Abbrechen</button>
+      <h2>Ordner wählen</h2>
+      <span style="width:80px"></span>
+    </div>
+    <div class="mailcard" id="selMail"></div>
+    <div class="search">
+      <svg><use href="#i-search"/></svg>
+      <input id="folderQ" type="search" placeholder="Ordner suchen …" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="clear hidden" id="folderQClear" aria-label="Löschen">✕</button>
+    </div>
+  </div>
+  <div class="sheet-body">
+    <div id="folderList"></div>
+    <button class="btn ghost newbtn" id="newFolderBtn"><svg width="18" height="18"><use href="#i-plus"/></svg>Neuer Ordner</button>
+  </div>
+</div>
+
+<!-- Sheet: Neuer Ordner -->
+<div class="sheet" id="newSheet" role="dialog" aria-modal="true" aria-label="Neuer Ordner">
+  <div class="sheet-head">
+    <div class="grabber"></div>
+    <div class="sheet-bar">
+      <button class="link" id="newCancel">Zurück</button>
+      <h2>Neuer Ordner</h2>
+      <button class="link" id="newSave" style="font-weight:600">Anlegen</button>
+    </div>
+  </div>
+  <div class="sheet-body">
+    <form id="newForm">
+      <div class="field"><label for="newName">Name des neuen Ordners</label><input id="newName" autocomplete="off" enterkeyhint="done" required></div>
+    </form>
+    <label class="toggle" id="moveToggleWrap"><span>Mail gleich dorthin verschieben</span><input type="checkbox" id="moveToo" checked></label>
+    <div class="section">Ablegen in <span class="picked" id="parentLabel">Oberste Ebene</span></div>
+    <div class="search">
+      <svg><use href="#i-search"/></svg>
+      <input id="parentQ" type="search" placeholder="Übergeordneten Ordner suchen …" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div id="parentList"></div>
+    <div class="err-text" id="newErr"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><div class="ic"><svg width="16" height="16"><use href="#i-check"/></svg></div><div class="msg"></div><button class="hidden" id="undoBtn">Rückgängig</button></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { accounts: [], acc: 0, mails: [], folders: null, folderAcc: null, mail: null, parent: '', mailQ: '' };
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
+  if (res.status === 401 && path !== '/api/login') { showLogin(); throw new Error('Bitte anmelden.'); }
+  if (!res.ok) throw new Error(data.error || 'Fehler ' + res.status);
+  return data;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
+const store = { get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (_) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} } };
+
+function when(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const day = 864e5, start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (d >= start) return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  if (d >= start - day) return 'Gestern';
+  if (d >= start - 6 * day) return d.toLocaleDateString('de-DE', { weekday: 'long' });
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+/* ---------- Anmeldung ---------- */
+function showLogin() { $('#mainView').classList.add('hidden'); $('#loginView').classList.remove('hidden'); setTimeout(() => $('#pw').focus(), 50); }
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault(); $('#loginErr').textContent = '';
+  try { await api('/api/login', { method: 'POST', body: { password: $('#pw').value } }); $('#pw').value = ''; start(); }
+  catch (err) { $('#loginErr').textContent = err.message; }
+});
+
+/* ---------- Mails ---------- */
+async function start() {
+  $('#loginView').classList.add('hidden'); $('#mainView').classList.remove('hidden');
+  const { accounts } = await api('/api/accounts');
+  state.accounts = accounts;
+  const saved = store.get('mv_acc', 0);
+  state.acc = accounts.some(a => a.id === saved) ? saved : 0;
+  renderChips();
+  loadMails();
+  loadFolders(); // im Hintergrund vorladen, damit die Ordnersuche sofort da ist
+}
+function renderChips() {
+  const el = $('#accChips');
+  if (state.accounts.length < 2) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = state.accounts.map(a => `<button class="chip ${a.id === state.acc ? 'on' : ''}" data-acc="${a.id}">${esc(a.name)}</button>`).join('');
+}
+$('#accChips').addEventListener('click', e => {
+  const b = e.target.closest('[data-acc]'); if (!b) return;
+  state.acc = Number(b.dataset.acc); store.set('mv_acc', state.acc); state.folders = null;
+  renderChips(); loadMails(); loadFolders();
+});
+
+let mailReq = 0;
+async function loadMails() {
+  const id = ++mailReq, list = $('#mailList');
+  list.innerHTML = '<div class="spinner"></div>';
+  try {
+    const q = state.mailQ ? '&q=' + encodeURIComponent(state.mailQ) : '';
+    const { messages } = await api(`/api/messages?account=${state.acc}${q}`);
+    if (id !== mailReq) return;
+    state.mails = messages;
+    if (!messages.length) { list.innerHTML = `<div class="empty">${state.mailQ ? 'Keine passende Mail im Posteingang.' : 'Der Posteingang ist leer. 🎉'}</div>`; return; }
+    list.innerHTML = '<div class="list">' + messages.map(m => `
+      <button class="row" data-uid="${m.uid}">
+        <span class="dot ${m.seen ? 'read' : ''}"></span>
+        <span class="main">
+          <span class="top"><span class="who">${esc(m.from)}</span><span class="when">${esc(when(m.date))}</span></span>
+          <span class="subj" style="display:block">${esc(m.subject)}</span>
+        </span>
+        <svg class="chev" width="8" height="14" viewBox="0 0 8 14"><path d="m1 1 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>`).join('') + '</div>';
+  } catch (err) {
+    if (id === mailReq) list.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+  }
+}
+$('#mailList').addEventListener('click', e => {
+  const r = e.target.closest('[data-uid]'); if (!r) return;
+  openFolderSheet(state.mails.find(m => m.uid === Number(r.dataset.uid)));
+});
+let mailT;
+$('#mailQ').addEventListener('input', e => {
+  $('#mailQClear').classList.toggle('hidden', !e.target.value);
+  clearTimeout(mailT); mailT = setTimeout(() => { state.mailQ = e.target.value.trim(); loadMails(); }, 450);
+});
+$('#mailQ').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(mailT); state.mailQ = e.target.value.trim(); loadMails(); e.target.blur(); } });
+$('#mailQClear').addEventListener('click', () => { $('#mailQ').value = ''; $('#mailQClear').classList.add('hidden'); state.mailQ = ''; loadMails(); });
+$('#reloadBtn').addEventListener('click', () => { state.folders = null; loadMails(); loadFolders(); });
+
+/* ---------- Ordner ---------- */
+let folderPromise = null;
+function loadFolders() {
+  if (state.folders && state.folderAcc === state.acc) return Promise.resolve(state.folders);
+  const acc = state.acc;
+  folderPromise = api(`/api/folders?account=${acc}`).then(({ folders }) => {
+    if (acc === state.acc) { state.folders = folders; state.folderAcc = acc; }
+    return folders;
+  });
+  return folderPromise;
+}
+const recentKey = () => 'mv_recent_' + state.acc;
+function pathLabel(f) { return f.parents.length ? f.parents.join(' › ') : ''; }
+function highlight(text, q) {
+  if (!q) return esc(text);
+  const n = norm(text), i = n.indexOf(norm(q));
+  if (i < 0) return esc(text);
+  return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+}
+function filterFolders(q, { excludeInbox = true } = {}) {
+  const all = (state.folders || []).filter(f => !(excludeInbox && (f.special === '\\Inbox' || f.path.toUpperCase() === 'INBOX')));
+  if (!q) return all;
+  const nq = norm(q);
+  const hits = all.filter(f => norm(f.name).includes(nq) || norm(f.parents.join(' ')).includes(nq));
+  // Treffer im Ordnernamen zuerst, dann Namensanfang, dann kürzere Pfade
+  const score = f => { const n = norm(f.name); return (n.startsWith(nq) ? 0 : n.includes(nq) ? 1 : 2) * 100 + f.parents.length; };
+  return hits.sort((a, b) => score(a) - score(b) || a.path.localeCompare(b.path, 'de'));
+}
+function folderRow(f, q, attr = 'data-path') {
+  const p = pathLabel(f);
+  return `<button class="row" ${attr}="${esc(f.path)}">
+    <span class="folder-ico"><svg><use href="#i-folder"/></svg></span>
+    <span class="main"><span class="fname">${highlight(f.name, q)}</span>${p ? `<span class="fpath">${highlight(p, q)}</span>` : ''}</span>
+  </button>`;
+}
+async function renderFolderList() {
+  const el = $('#folderList'), q = $('#folderQ').value.trim();
+  if (!state.folders) {
+    el.innerHTML = '<div class="spinner"></div>';
+    try { await loadFolders(); } catch (err) { el.innerHTML = `<div class="empty">${esc(err.message)}</div>`; return; }
+  }
+  let html = '';
+  if (!q) {
+    const recent = store.get(recentKey(), []).map(p => state.folders.find(f => f.path === p)).filter(Boolean).slice(0, 5);
+    if (recent.length) html += '<div class="section">Zuletzt benutzt</div><div class="list" style="margin-top:0">' + recent.map(f => folderRow(f, '')).join('') + '</div>';
+    html += '<div class="section">Alle Ordner</div>';
+  }
+  const hits = filterFolders(q);
+  if (!hits.length) html += `<div class="empty">Kein Ordner mit „${esc(q)}“ gefunden.<br>Unten kannst du ihn neu anlegen.</div>`;
+  else html += `<div class="list" style="margin-top:${q ? 12 : 0}px">` + hits.map(f => folderRow(f, q)).join('') + '</div>';
+  el.innerHTML = html;
+}
+
+function openSheet(id) { $('#backdrop').classList.add('show'); $(id).classList.add('show'); }
+function closeSheets() { document.querySelectorAll('.sheet').forEach(s => s.classList.remove('show')); $('#backdrop').classList.remove('show'); document.activeElement && document.activeElement.blur(); }
+$('#backdrop').addEventListener('click', closeSheets);
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+
+function openFolderSheet(mail) {
+  state.mail = mail;
+  $('#selMail').innerHTML = `<b>${esc(mail.subject)}</b><span>${esc(mail.from)} · ${esc(when(mail.date))}</span>`;
+  $('#folderQ').value = ''; $('#folderQClear').classList.add('hidden');
+  openSheet('#folderSheet');
+  $('#folderQ').focus(); // direkt im Tipp-Handler, damit iOS die Tastatur öffnet
+  renderFolderList();
+}
+$('#folderQ').addEventListener('input', e => { $('#folderQClear').classList.toggle('hidden', !e.target.value); renderFolderList(); });
+$('#folderQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); renderFolderList(); e.target.blur(); } });
+$('#folderQClear').addEventListener('click', () => { $('#folderQ').value = ''; $('#folderQClear').classList.add('hidden'); renderFolderList(); $('#folderQ').focus(); });
+$('#folderList').addEventListener('click', e => {
+  const r = e.target.closest('[data-path]'); if (!r) return;
+  moveTo(r.dataset.path);
+});
+
+/* ---------- Verschieben ---------- */
+let lastMove = null;
+async function moveTo(path) {
+  const mail = state.mail, acc = state.acc;
+  const folder = (state.folders || []).find(f => f.path === path);
+  closeSheets();
+  // sofort aus der Liste nehmen, bei Fehler wieder anzeigen
+  state.mails = state.mails.filter(m => m.uid !== mail.uid);
+  const row = document.querySelector(`#mailList [data-uid="${mail.uid}"]`); if (row) row.remove();
+  toast('Wird verschoben …');
+  try {
+    const r = await api('/api/move', { method: 'POST', body: { account: acc, uid: mail.uid, from: 'INBOX', to: path } });
+    store.set(recentKey(), [path, ...store.get(recentKey(), []).filter(p => p !== path)].slice(0, 8));
+    lastMove = r.newUid ? { acc, uid: r.newUid, from: path } : null;
+    toast(`Verschoben nach „${folder ? folder.name : path}“`, { undo: !!lastMove });
+    if (!document.querySelector('#mailList .row')) loadMails();
+  } catch (err) {
+    toast(err.message, { error: true });
+    loadMails();
+  }
+}
+$('#undoBtn').addEventListener('click', async () => {
+  if (!lastMove) return;
+  const m = lastMove; lastMove = null;
+  toast('Wird zurückgeholt …');
+  try {
+    await api('/api/move', { method: 'POST', body: { account: m.acc, uid: m.uid, from: m.from, to: 'INBOX' } });
+    toast('Zurück im Posteingang'); loadMails();
+  } catch (err) { toast(err.message, { error: true }); }
+});
+
+let toastT;
+function toast(text, { undo = false, error = false } = {}) {
+  const t = $('#toast');
+  t.querySelector('.msg').textContent = text;
+  t.classList.toggle('err', error);
+  t.querySelector('.ic use').setAttribute('href', error ? '#i-x' : '#i-check');
+  $('#undoBtn').classList.toggle('hidden', !undo);
+  t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), undo ? 6000 : error ? 5000 : 2500);
+}
+
+/* ---------- Neuer Ordner ---------- */
+$('#newFolderBtn').addEventListener('click', () => {
+  state.parent = '';
+  $('#newName').value = $('#folderQ').value.trim();
+  $('#parentQ').value = ''; $('#newErr').textContent = '';
+  $('#parentLabel').textContent = 'Oberste Ebene';
+  $('#moveToggleWrap').classList.toggle('hidden', !state.mail);
+  $('#folderSheet').classList.remove('show');
+  openSheet('#newSheet');
+  $('#newName').focus();
+  renderParentList();
+});
+$('#newCancel').addEventListener('click', () => { $('#newSheet').classList.remove('show'); openSheet('#folderSheet'); });
+$('#parentQ').addEventListener('input', renderParentList);
+$('#parentQ').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+function renderParentList() {
+  const q = $('#parentQ').value.trim();
+  const hits = filterFolders(q, { excludeInbox: false }).slice(0, 40);
+  const top = `<button class="row" data-parent=""><span class="folder-ico" style="background:var(--field);color:var(--muted)"><svg><use href="#i-folder"/></svg></span><span class="main"><span class="fname">Oberste Ebene</span><span class="fpath">kein Unterordner</span></span>${state.parent === '' ? '<span class="picked">✓</span>' : ''}</button>`;
+  $('#parentList').innerHTML = '<div class="list" style="margin-top:12px">' + (q ? '' : top) +
+    hits.map(f => folderRow(f, q, 'data-parent').replace('</button>', state.parent === f.path ? '<span class="picked">✓</span></button>' : '</button>')).join('') + '</div>';
+}
+$('#parentList').addEventListener('click', e => {
+  const r = e.target.closest('[data-parent]'); if (!r) return;
+  state.parent = r.dataset.parent;
+  const f = (state.folders || []).find(x => x.path === state.parent);
+  $('#parentLabel').textContent = f ? [...f.parents, f.name].join(' › ') : 'Oberste Ebene';
+  renderParentList();
+});
+$('#newForm').addEventListener('submit', e => { e.preventDefault(); createFolder(); });
+$('#newSave').addEventListener('click', createFolder);
+async function createFolder() {
+  const name = $('#newName').value.trim();
+  if (!name) { $('#newErr').textContent = 'Bitte einen Namen eingeben.'; $('#newName').focus(); return; }
+  $('#newSave').disabled = true; $('#newErr').textContent = '';
+  try {
+    const { path } = await api('/api/create-folder', { method: 'POST', body: { account: state.acc, name, parent: state.parent } });
+    state.folders = null; await loadFolders();
+    if (state.mail && $('#moveToo').checked) { await moveTo(path); }
+    else { closeSheets(); toast(`Ordner „${name}“ angelegt`); }
+  } catch (err) { $('#newErr').textContent = err.message; }
+  finally { $('#newSave').disabled = false; }
+}
+
+start().catch(() => {});
+</script>
+</body>
+</html>

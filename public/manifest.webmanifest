@@ -1,0 +1,1 @@
+{ "name": "Mail verschieben", "short_name": "Verschieben", "start_url": "/", "display": "standalone", "background_color": "#f2f2f7", "theme_color": "#0a7cff", "icons": [{ "src": "/icon.png", "sizes": "512x512", "type": "image/png" }] }
