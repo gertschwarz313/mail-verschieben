@@ -118,7 +118,9 @@ mark { background: rgba(255,204,0,.45); color: inherit; border-radius: 3px; padd
 .login .logo svg { width: 38px; height: 38px; }
 .login .field { text-align: left; }
 .err-text { color: var(--danger); font-size: 15px; min-height: 20px; margin: 8px 0; }
-.foot { text-align: center; margin-top: 18px; }
+.foot { text-align: center; margin-top: 18px; color: var(--muted); }
+.adv { text-align: left; margin: 4px 4px 0; color: var(--muted); font-size: 15px; }
+.adv summary { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -137,11 +139,16 @@ mark { background: rgba(255,204,0,.45); color: inherit; border-radius: 3px; padd
   <div class="login">
     <div class="logo"><svg><use href="#i-move"/></svg></div>
     <h1 style="font-size:26px">Mail verschieben</h1>
-    <p class="sub" style="margin-bottom:22px">Einmal anmelden, danach merkt sich das iPhone das.</p>
+    <p class="sub" style="margin-bottom:22px" id="loginSub">Einmal mit deinem Postfach anmelden, danach merkt sich das iPhone das.</p>
     <form id="loginForm">
-      <div class="field"><label for="pw">Passwort für dieses Tool</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <div class="field"><label for="lu">E-Mail-Adresse</label><input id="lu" type="email" autocomplete="username" autocapitalize="off" required></div>
+      <div class="field"><label for="pw">Passwort des Postfachs</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <details class="adv"><summary>Server ändern (meist nicht nötig)</summary>
+        <div class="field" style="margin-top:8px"><label for="lh">IMAP-Server</label><input id="lh" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="wird automatisch erkannt, z. B. imap.strato.de"></div>
+      </details>
       <div class="err-text" id="loginErr"></div>
-      <button class="btn" type="submit">Anmelden</button>
+      <button class="btn" type="submit" id="loginBtn">Anmelden</button>
+      <button class="link hidden" type="button" id="loginBack" style="margin-top:8px">Abbrechen</button>
     </form>
   </div>
 </div>
@@ -157,7 +164,7 @@ mark { background: rgba(255,204,0,.45); color: inherit; border-radius: 3px; padd
     <button class="clear hidden" id="mailQClear" aria-label="Löschen">✕</button>
   </div>
   <div id="mailList"></div>
-  <div class="foot"><button class="link" id="reloadBtn">Aktualisieren</button></div>
+  <div class="foot"><button class="link" id="reloadBtn">Aktualisieren</button> · <button class="link" id="addAccBtn">Postfach hinzufügen</button> · <button class="link" id="logoutBtn">Abmelden</button></div>
 </div>
 
 <div class="backdrop" id="backdrop"></div>
@@ -238,11 +245,28 @@ function when(iso) {
 }
 
 /* ---------- Anmeldung ---------- */
-function showLogin() { $('#mainView').classList.add('hidden'); $('#loginView').classList.remove('hidden'); setTimeout(() => $('#pw').focus(), 50); }
+function showLogin(adding = false) {
+  $('#mainView').classList.add('hidden'); $('#loginView').classList.remove('hidden');
+  $('#loginSub').textContent = adding ? 'Weiteres Postfach hinzufügen.' : 'Einmal mit deinem Postfach anmelden, danach merkt sich das iPhone das.';
+  $('#loginBack').classList.toggle('hidden', !adding);
+  $('#loginErr').textContent = '';
+  setTimeout(() => $('#lu').focus(), 50);
+}
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault(); $('#loginErr').textContent = '';
-  try { await api('/api/login', { method: 'POST', body: { password: $('#pw').value } }); $('#pw').value = ''; start(); }
-  catch (err) { $('#loginErr').textContent = err.message; }
+  const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = 'Verbinde …';
+  try {
+    const r = await api('/api/login', { method: 'POST', body: { user: $('#lu').value, pass: $('#pw').value, host: $('#lh').value } });
+    $('#pw').value = ''; $('#lu').value = ''; $('#lh').value = '';
+    store.set('mv_acc', r.account); state.folders = null; start();
+  } catch (err) { $('#loginErr').textContent = err.message; }
+  finally { btn.disabled = false; btn.textContent = 'Anmelden'; }
+});
+$('#loginBack').addEventListener('click', () => { $('#loginView').classList.add('hidden'); $('#mainView').classList.remove('hidden'); });
+$('#addAccBtn').addEventListener('click', () => showLogin(true));
+$('#logoutBtn').addEventListener('click', async () => {
+  try { await api('/api/login', { method: 'POST', body: { logout: true } }); } catch (_) {}
+  state.folders = null; showLogin();
 });
 
 /* ---------- Mails ---------- */

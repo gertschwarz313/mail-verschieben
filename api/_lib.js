@@ -2,37 +2,31 @@
 const crypto = require('crypto');
 const { ImapFlow } = require('imapflow');
 
-const COOKIE = 'mv_session';
-const MAX_AGE = 60 * 60 * 24 * 180; // 180 Tage angemeldet bleiben
+const COOKIE = 'mv_auth';
+const MAX_AGE = 60 * 60 * 24 * 365; // ein Jahr angemeldet bleiben
 
-function secret() {
-  const pw = process.env.APP_PASSWORD;
-  if (!pw) throw httpError(500, 'APP_PASSWORD ist nicht eingerichtet.');
-  return crypto.createHash('sha256').update('mv:' + pw + ':' + (process.env.SESSION_SECRET || '')).digest();
+// Die Zugangsdaten der Postfächer liegen verschlüsselt (AES-256-GCM) in einem
+// HttpOnly-Cookie auf dem iPhone. Der Schlüssel liegt nur auf dem Server.
+function key() {
+  const k = process.env.SESSION_KEY || process.env.APP_PASSWORD;
+  if (!k) throw httpError(500, 'SESSION_KEY ist nicht eingerichtet.');
+  return crypto.createHash('sha256').update('mv-key:' + k).digest();
 }
 
-function sign(payload) {
-  return crypto.createHmac('sha256', secret()).update(payload).digest('base64url');
+function seal(obj) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', key(), iv);
+  const data = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), data]).toString('base64url');
 }
 
-function makeToken() {
-  const exp = String(Math.floor(Date.now() / 1000) + MAX_AGE);
-  return exp + '.' + sign(exp);
-}
-
-function validToken(token) {
-  if (!token || !token.includes('.')) return false;
-  const [exp, sig] = token.split('.');
-  if (!/^\d+$/.test(exp) || Number(exp) < Date.now() / 1000) return false;
-  const a = Buffer.from(sig || '');
-  const b = Buffer.from(sign(exp));
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
-function passwordMatches(input) {
-  const a = crypto.createHash('sha256').update(String(input || '')).digest();
-  const b = crypto.createHash('sha256').update(String(process.env.APP_PASSWORD || '')).digest();
-  return !!process.env.APP_PASSWORD && crypto.timingSafeEqual(a, b);
+function unseal(token) {
+  try {
+    const buf = Buffer.from(token, 'base64url');
+    const d = crypto.createDecipheriv('aes-256-gcm', key(), buf.subarray(0, 12));
+    d.setAuthTag(buf.subarray(12, 28));
+    return JSON.parse(Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8'));
+  } catch (_) { return null; }
 }
 
 function getCookie(req, name) {
@@ -44,41 +38,48 @@ function getCookie(req, name) {
   return null;
 }
 
-function sessionCookie(token, maxAge) {
-  return `${COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+function authCookie(accounts) {
+  if (!accounts || !accounts.length) return `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+  return `${COOKIE}=${seal({ accounts, exp: Date.now() + MAX_AGE * 1000 })}; Path=/; Max-Age=${MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
 }
 
-// Postfächer aus Umgebungsvariablen: MAIL_USER/MAIL_PASS (+ MAIL_HOST, MAIL_NAME),
-// weitere Konten als MAIL2_USER, MAIL2_PASS, MAIL2_HOST, MAIL2_NAME usw. (bis 9)
+function sessionAccounts(req) {
+  const raw = getCookie(req, COOKIE);
+  const s = raw && unseal(raw);
+  if (!s || !Array.isArray(s.accounts) || s.exp < Date.now()) return [];
+  return s.accounts;
+}
+
+// Passenden IMAP-Server zur Mailadresse raten (eigene Domains: Strato)
+const HOSTS = {
+  'gmail.com': 'imap.gmail.com', 'googlemail.com': 'imap.gmail.com',
+  'gmx.de': 'imap.gmx.net', 'gmx.net': 'imap.gmx.net', 'gmx.at': 'imap.gmx.net', 'gmx.ch': 'imap.gmx.net',
+  'web.de': 'imap.web.de', 't-online.de': 'secureimap.t-online.de',
+  'outlook.com': 'outlook.office365.com', 'outlook.de': 'outlook.office365.com', 'hotmail.com': 'outlook.office365.com', 'hotmail.de': 'outlook.office365.com', 'live.com': 'outlook.office365.com', 'live.de': 'outlook.office365.com',
+  'icloud.com': 'imap.mail.me.com', 'me.com': 'imap.mail.me.com', 'mac.com': 'imap.mail.me.com',
+  'yahoo.com': 'imap.mail.yahoo.com', 'yahoo.de': 'imap.mail.yahoo.com', 'aol.com': 'imap.aol.com',
+  'freenet.de': 'mx.freenet.de', 'posteo.de': 'posteo.de', 'mailbox.org': 'imap.mailbox.org', '1und1.de': 'imap.1und1.de', 'ionos.de': 'imap.ionos.de',
+};
+function guessHost(email) {
+  const domain = String(email).split('@')[1] || '';
+  return HOSTS[domain.toLowerCase()] || 'imap.strato.de';
+}
+
+let currentReq = null;
 function accounts() {
-  const list = [];
-  for (let i = 1; i <= 9; i++) {
-    const p = i === 1 ? 'MAIL_' : `MAIL${i}_`;
-    const user = process.env[p + 'USER'];
-    if (!user) continue;
-    list.push({
-      id: list.length,
-      name: process.env[p + 'NAME'] || user,
-      user,
-      pass: process.env[p + 'PASS'] || '',
-      host: process.env[p + 'HOST'] || 'imap.strato.de',
-      port: Number(process.env[p + 'PORT'] || 993),
-      secure: (process.env[p + 'SECURE'] || 'true') !== 'false',
-    });
-  }
-  return list;
+  return sessionAccounts(currentReq).map((a, i) => ({ id: i, name: a.name || a.user, user: a.user, pass: a.pass, host: a.host, port: a.port || 993, secure: a.secure !== false }));
 }
 
 function account(id) {
   const list = accounts();
-  if (!list.length) throw httpError(500, 'Es ist noch kein Postfach eingerichtet (MAIL_USER fehlt).');
+  if (!list.length) throw httpError(401, 'Bitte anmelden.');
   const acc = list[Number(id) || 0];
   if (!acc) throw httpError(400, 'Unbekanntes Postfach.');
   return acc;
 }
 
 async function withImap(accId, fn) {
-  const acc = account(accId);
+  const acc = typeof accId === 'object' && accId ? accId : account(accId);
   const client = new ImapFlow({
     host: acc.host, port: acc.port, secure: acc.secure,
     auth: { user: acc.user, pass: acc.pass },
@@ -126,7 +127,8 @@ function handler(fn, { auth = true, methods = ['GET'] } = {}) {
   return async (req, res) => {
     try {
       if (!methods.includes(req.method)) return send(res, 405, { error: 'Methode nicht erlaubt' });
-      if (auth && !validToken(getCookie(req, COOKIE))) return send(res, 401, { error: 'Bitte anmelden.' });
+      currentReq = req;
+      if (auth && !sessionAccounts(req).length) return send(res, 401, { error: 'Bitte anmelden.' });
       const url = new URL(req.url, 'http://x');
       const body = req.method === 'POST' ? await readBody(req) : {};
       const out = await fn({ req, res, query: Object.fromEntries(url.searchParams), body });
@@ -137,4 +139,4 @@ function handler(fn, { auth = true, methods = ['GET'] } = {}) {
   };
 }
 
-module.exports = { handler, withImap, accounts, httpError, makeToken, passwordMatches, sessionCookie, send, MAX_AGE };
+module.exports = { handler, withImap, accounts, sessionAccounts, authCookie, guessHost, httpError, send };

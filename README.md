@@ -6,4 +6,4 @@ Kleine Web-App (Vercel-Serverless + IMAP via imapflow), um Mails vom iPhone per 
 - `api/*.js` – Endpunkte: login, accounts, messages, folders, move, create-folder
 - `server.js` – optionaler eigener Server (`npm start`), nicht für Vercel nötig
 
-Umgebungsvariablen: `APP_PASSWORD`, `MAIL_USER`, `MAIL_PASS`, optional `MAIL_HOST` (Standard `imap.strato.de`), `MAIL_PORT` (993), `MAIL_SECURE` (true), `MAIL_NAME`, weitere Konten `MAIL2_…` bis `MAIL9_…`.
+Einzige Umgebungsvariable: `SESSION_KEY` (beliebige lange Zufallszeichenkette). Die Postfach-Zugangsdaten gibt man in der App selbst ein; sie werden mit AES-256-GCM verschlüsselt in einem HttpOnly-Cookie auf dem iPhone gespeichert. Der IMAP-Server wird anhand der Mailadresse erkannt (eigene Domains: imap.strato.de) und kann bei der Anmeldung geändert werden.
